@@ -3,6 +3,8 @@ import dataclasses
 import itertools
 import typing
 
+import ankiconnect
+
 import reverso_context_api
 
 
@@ -15,7 +17,7 @@ class ReversoTranslationSample:
         return f"\tReversoTranslationSample<{self.en=}, {self.ru=}>"
 
     def __str__(self) -> str:
-        return self.__repr__()
+        return f"{self.en} -> {self.ru}"
 
 
 @dataclasses.dataclass
@@ -40,10 +42,8 @@ def get_reverso_result(word) -> ReversoResult:
     def transform_samples(
         samples: typing.List[typing.Tuple[str, str]]
     ) -> typing.List[ReversoTranslationSample]:
-        return [
-            ReversoTranslationSample(en=example[0], ru=example[1])
-            for example in samples
-        ]
+        f = lambda x: x.replace("<em>", "<b>").replace("</em>", "</b>")
+        return [ReversoTranslationSample(*map(f, example)) for example in samples]
 
     return ReversoResult(
         en_word=word,
@@ -65,10 +65,13 @@ def parse_args():
 
 def main():
     args = parse_args()
-    r = get_reverso_result(args.word)
+    r = get_reverso_result(args.word.strip().lower())
     print(r)
-    # russian_word = translate_word(args.word)
-    # samples = get_usage_samples(args.word)
+    ans = input("Add to Anki? (y/n): ")
+    if ans != "y":
+        return
+    ankiconnect.add_card_to_anki(r.en_word, r.ru_translations, r.usage_samples)
+    ankiconnect.sync()
 
 
 if __name__ == "__main__":

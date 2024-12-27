@@ -2,3 +2,4 @@
 .metagen_key
 venv/
 .vscode/
+__pycache__
