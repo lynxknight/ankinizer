@@ -1,8 +1,8 @@
-# add card to anki
-# TODO: idempotent
-
 import json
 import urllib.request
+import typing
+
+from reverso import ReversoTranslationSample
 
 TARGET_DECK = "English words"
 
@@ -28,7 +28,7 @@ def _invoke(action, **params):
     return response["result"]
 
 
-def add_card_to_anki(word, ru_translations, usage_samples):
+def add_card_to_anki(word, ru_translations: typing.List[str], usage_samples: typing.List[ReversoTranslationSample]):
     back = (
         " / ".join(ru_translations)
         + "<br><br> * "
