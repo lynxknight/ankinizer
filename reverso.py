@@ -1,7 +1,6 @@
-
-import typing
 import dataclasses
 import itertools
+import typing
 
 import reverso_context_api
 
@@ -32,6 +31,9 @@ class ReversoResult:
                 "\n".join(str(sample) for sample in self.usage_samples),
             ]
         )
+
+    def get_usage_samples_html(self) -> str:
+        return "\n\n".join(str(sample) for sample in self.usage_samples)
 
 
 def get_reverso_result(word) -> ReversoResult:

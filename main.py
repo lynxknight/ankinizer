@@ -7,7 +7,7 @@ import reverso
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Translate English words to Russian")
-    parser.add_argument("-w", "--word", help="English word to translate")
+    parser.add_argument("-w", "--word", help="English word to translate", required=True)
     args = parser.parse_args()
     return args
 
