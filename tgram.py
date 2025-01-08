@@ -1,13 +1,14 @@
 import asyncio
+import dataclasses
 import logging
-import re
 
 import ankiconnect
 import reverso
 
-from telegram import Update
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import (
     ApplicationBuilder,
+    CallbackQueryHandler,
     CommandHandler,
     ContextTypes,
     ConversationHandler,
@@ -27,6 +28,39 @@ WORD, EDIT_NUMBERS = range(2)
 # Store user data
 user_data = {}
 
+ACCEPT_OR_DECLINE = "ACCEPT_OR_DECLINE"
+
+
+class AcceptBoth:
+    text = "Accept both"
+    key = "accept_both"
+
+
+class AcceptContextFixTranslation:
+    text = "Accept context, fix translation"
+    key = "accept_context_fix_translation"
+
+
+class Reject:
+    text = "Reject"
+    key = "reject"
+
+
+class Actions:
+    @staticmethod
+    def get_all():
+        return [AcceptBoth, AcceptContextFixTranslation, Reject]
+
+    @staticmethod
+    def get_key_to_text_map():
+        return {a.key: a.text for a in Actions.get_all()}
+
+
+@dataclasses.dataclass
+class CallbackData:
+    action_key: str
+    reverso_result: reverso.ReversoResult
+
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await update.message.reply_text("Please send me a word.")
@@ -35,29 +69,44 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 
 async def get_word(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     word = update.message.text
-    logger.info(f"BEFORE TO THREAD")
     results = await asyncio.to_thread(reverso.get_reverso_result, word)
-    logger.info(f"AFTER TO THREAD")
     await update.message.reply_text(f"Word: {results.en_word}")
     await update.message.reply_text(", ".join(results.ru_translations))
     logger.info(results.get_usage_samples_html())
+    await update.message.reply_html(results.get_usage_samples_html())
+    context.user_data["reverso_result"] = results
     keyboard = [
-        [InlineKeyboardButton("Yes", callback_data='yes')],
-        [InlineKeyboardButton("No", callback_data='no')]
+        [InlineKeyboardButton(a.text, callback_data=a.key) for a in Actions.get_all()]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_html(results.get_usage_samples_html(), reply_markup=reply_markup)
+    await update.message.reply_text("Add to anki?", reply_markup=reply_markup)
     return ACCEPT_OR_DECLINE
 
 
 async def accept_or_decline(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
-    query.answer()
     answer = query.data
-    if answer == 'yes':
-        query.edit_message_text(text='You selected yes!')
-    elif answer == 'no':
-        query.edit_message_text(text='You selected no!')
+    reverso_results = context.user_data["reverso_result"]
+    await query.edit_message_text(text=Actions.get_key_to_text_map()[answer])
+    if answer == Reject.key:
+        pass
+    elif answer == AcceptBoth.key:
+        try:
+            # await asyncio.to_thread(
+            #     ankiconnect.add_card_to_anki,
+            # )
+            await query.message.reply_text("Added to anki")
+            await asyncio.to_thread(
+                ankiconnect.add_card_to_anki, reverso_results, sync=True
+            )
+            await query.message.reply_text("Added to anki and synced")
+        except Exception as e:
+            logging.exception(e)
+            await query.message.reply_text("Something went wrong")
+    elif answer == AcceptContextFixTranslation.key:
+        await query.edit_message_text(ac)
+        await query.message.reply_text("Not implemented yet")
+    return ConversationHandler.END
 
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -76,9 +125,7 @@ def main() -> None:
     conv_handler = ConversationHandler(
         entry_points=[MessageHandler(filters.TEXT & ~filters.COMMAND, get_word)],
         states={
-            ACCEPT_OR_DECLINE: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, accept_or_decline)
-            ],
+            ACCEPT_OR_DECLINE: [CallbackQueryHandler(accept_or_decline)],
         },
         fallbacks=[CommandHandler("cancel", cancel)],
     )

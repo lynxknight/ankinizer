@@ -1,8 +1,8 @@
 import json
-import urllib.request
 import typing
+import urllib.request
 
-from reverso import ReversoTranslationSample
+from reverso import ReversoResult, ReversoTranslationSample
 
 TARGET_DECK = "English words"
 
@@ -28,16 +28,22 @@ def _invoke(action, **params):
     return response["result"]
 
 
-def add_card_to_anki(word, ru_translations: typing.List[str], usage_samples: typing.List[ReversoTranslationSample]):
+def add_card_to_anki(
+    reverso_result: ReversoResult,
+    sync=False,
+):
+    if sync:
+        _invoke("sync")
+    rr = reverso_result
     back = (
-        " / ".join(ru_translations)
+        " / ".join(rr.ru_translations)
         + "<br><br> * "
-        + "<br> * ".join(map(str, usage_samples))
+        + "<br> * ".join(map(str, rr.usage_samples))
     )
-    note={
+    note = {
         "deckName": TARGET_DECK,
         "modelName": "Basic",
-        "fields": {"Front": word, "Back": back},
+        "fields": {"Front": rr.en_word, "Back": back},
         "tags": ["ankinizer"],
         "options": {
             "allowDuplicate": False,
@@ -45,18 +51,22 @@ def add_card_to_anki(word, ru_translations: typing.List[str], usage_samples: typ
         },
     }
     try:
-        _invoke( "addNote", note=note)
+        _invoke("addNote", note=note)
     except Exception as e:
-        if 'duplicate' in str(e):
+        if "duplicate" in str(e):
             print("card already exists")
             return
         else:
             raise
     print("card added")
+    if sync:
+        _invoke("sync")
+
 
 def sync():
     _invoke("sync")
-    print('synced')
+    print("synced")
+
 
 def _main():
     result = _invoke("deckNames")
