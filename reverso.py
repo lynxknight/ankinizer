@@ -45,12 +45,11 @@ def get_reverso_result(word) -> ReversoResult:
         f = lambda x: x.replace("<em>", "<b>").replace("</em>", "</b>")
         return [ReversoTranslationSample(*map(f, example)) for example in samples]
 
+    ru_translations = list(client.get_translations(word))
+    raw_usage_samples = list(
+        itertools.islice(client.get_translation_samples(word, cleanup=False), 3)
+    )
+    usage_samples = transform_samples(raw_usage_samples)
     return ReversoResult(
-        en_word=word,
-        ru_translations=list(client.get_translations(word)),
-        usage_samples=transform_samples(
-            list(
-                itertools.islice(client.get_translation_samples(word, cleanup=False), 3)
-            )
-        ),
+        en_word=word, ru_translations=ru_translations, usage_samples=usage_samples
     )

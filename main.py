@@ -1,5 +1,4 @@
 import argparse
-import typing
 
 import ankiconnect
 import reverso
@@ -19,8 +18,7 @@ def main():
     ans = input("Add to Anki? (y/n): ")
     if ans != "y":
         return
-    ankiconnect.add_card_to_anki(r.en_word, r.ru_translations, r.usage_samples)
-    ankiconnect.sync()
+    ankiconnect.add_card_to_anki(r, sync=True)
 
 
 if __name__ == "__main__":

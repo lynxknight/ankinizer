@@ -92,10 +92,7 @@ async def accept_or_decline(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         pass
     elif answer == AcceptBoth.key:
         try:
-            # await asyncio.to_thread(
-            #     ankiconnect.add_card_to_anki,
-            # )
-            await query.message.reply_text("Added to anki")
+            await query.message.reply_text("Adding to anki...")
             await asyncio.to_thread(
                 ankiconnect.add_card_to_anki, reverso_results, sync=True
             )
@@ -131,7 +128,6 @@ def main() -> None:
     )
 
     application.add_handler(conv_handler)
-
     application.run_polling()
 
 

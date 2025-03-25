@@ -32,8 +32,6 @@ def add_card_to_anki(
     reverso_result: ReversoResult,
     sync=False,
 ):
-    if sync:
-        _invoke("sync")
     rr = reverso_result
     back = (
         " / ".join(rr.ru_translations)
