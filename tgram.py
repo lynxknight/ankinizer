@@ -92,14 +92,19 @@ async def accept_or_decline(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         pass
     elif answer == AcceptBoth.key:
         try:
-            await query.message.reply_text("Adding to anki...")
+            await query.message.reply_text("Checking Anki status...")
             await asyncio.to_thread(
                 ankiconnect.add_card_to_anki, reverso_results, sync=True
             )
             await query.message.reply_text("Added to anki and synced")
         except Exception as e:
-            logging.exception(e)
-            await query.message.reply_text("Something went wrong")
+            if "Failed to ensure Anki is running" in str(e):
+                await query.message.reply_text("Could not connect to Anki. Please make sure Anki is installed and AnkiConnect plugin is set up.")
+            elif "duplicate" in str(e):
+                await query.message.reply_text("This card already exists in Anki.")
+            else:
+                logging.exception(e)
+                await query.message.reply_text(f"Error adding card to Anki: {str(e)}")
     elif answer == AcceptContextFixTranslation.key:
         await query.message.reply_text("Please enter your custom translation:")
         return CUSTOM_TRANSLATION
@@ -140,9 +145,9 @@ def read_telegram_token() -> str:
         with open(".telegram_key", "r") as f:
             return f.read().strip()
     except FileNotFoundError:
-        logger.error(f"Error reading telegram token from .telegram_key: {e}")    
+        logger.error(f"Error reading telegram token from .telegram_key: {e}")
         raise
-    
+
 
 def main() -> None:
     # Build and run the application
