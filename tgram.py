@@ -23,7 +23,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Define states for the conversation
-WORD, EDIT_NUMBERS = range(2)
+WORD, CUSTOM_TRANSLATION, ACCEPT_OR_DECLINE = range(3)
 
 # Store user data
 user_data = {}
@@ -37,7 +37,7 @@ class AcceptBoth:
 
 
 class AcceptContextFixTranslation:
-    text = "Accept context, fix translation"
+    text = "Fix ru_translation"
     key = "accept_context_fix_translation"
 
 
@@ -101,9 +101,33 @@ async def accept_or_decline(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             logging.exception(e)
             await query.message.reply_text("Something went wrong")
     elif answer == AcceptContextFixTranslation.key:
-        await query.edit_message_text(ac)
-        await query.message.reply_text("Not implemented yet")
+        await query.message.reply_text("Please enter your custom translation:")
+        return CUSTOM_TRANSLATION
     return ConversationHandler.END
+
+
+async def handle_custom_translation(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    custom_translation = update.message.text
+    reverso_results = context.user_data["reverso_result"]
+    # Create a new ReversoResult with the custom translation
+    modified_results = reverso.ReversoResult(
+        en_word=reverso_results.en_word,
+        ru_translations=[custom_translation],  # Replace with user's translation
+        usage_samples=reverso_results.usage_samples  # Keep original context
+    )
+    context.user_data["reverso_result"] = modified_results
+    
+    # Show the modified result and prompt for acceptance
+    await update.message.reply_text(f"Word: {modified_results.en_word}")
+    await update.message.reply_text(f"Translation: {custom_translation}")
+    await update.message.reply_html(modified_results.get_usage_samples_html())
+    
+    keyboard = [
+        [InlineKeyboardButton(a.text, callback_data=a.key) for a in Actions.get_all()]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await update.message.reply_text("Add to anki?", reply_markup=reply_markup)
+    return ACCEPT_OR_DECLINE
 
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -111,11 +135,20 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     return ConversationHandler.END
 
 
+def read_telegram_token() -> str:
+    try:
+        with open(".telegram_key", "r") as f:
+            return f.read().strip()
+    except FileNotFoundError:
+        logger.error(f"Error reading telegram token from .telegram_key: {e}")    
+        raise
+    
+
 def main() -> None:
-    # TODO: conversation handler that accepts yes or no and on "yes" uploads to anki
+    # Build and run the application
     application = (
         ApplicationBuilder()
-        .token("513477620:AAEh-LVlFF_5d0q-IeG2lLCkQCIWk-mrp0s")
+        .token(read_telegram_token())
         .build()
     )
 
@@ -123,6 +156,7 @@ def main() -> None:
         entry_points=[MessageHandler(filters.TEXT & ~filters.COMMAND, get_word)],
         states={
             ACCEPT_OR_DECLINE: [CallbackQueryHandler(accept_or_decline)],
+            CUSTOM_TRANSLATION: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_custom_translation)],
         },
         fallbacks=[CommandHandler("cancel", cancel)],
     )
