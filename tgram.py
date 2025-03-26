@@ -83,6 +83,26 @@ async def get_word(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     return ACCEPT_OR_DECLINE
 
 
+async def handle_accept_both(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    reverso_results = context.user_data["reverso_result"]
+    await query.message.reply_text("Adding to anki...")
+    try:
+        await asyncio.to_thread(
+            ankiconnect.add_card_to_anki, reverso_results, sync=True
+        )
+    except Exception as e:
+        if "Failed to ensure Anki is running" in str(e):
+            await query.message.reply_text("Could not connect to Anki. Please make sure Anki is installed and AnkiConnect plugin is set up.")
+        elif "duplicate" in str(e):
+            await query.message.reply_text("This card already exists in Anki.")
+        else:
+            logging.exception(e)
+            await query.message.reply_text(f"Error adding card to Anki: {str(e)}")
+
+    await query.message.reply_text("Added to anki and synced")
+
+
 async def accept_or_decline(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
     answer = query.data
@@ -91,20 +111,7 @@ async def accept_or_decline(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     if answer == Reject.key:
         pass
     elif answer == AcceptBoth.key:
-        try:
-            await query.message.reply_text("Checking Anki status...")
-            await asyncio.to_thread(
-                ankiconnect.add_card_to_anki, reverso_results, sync=True
-            )
-            await query.message.reply_text("Added to anki and synced")
-        except Exception as e:
-            if "Failed to ensure Anki is running" in str(e):
-                await query.message.reply_text("Could not connect to Anki. Please make sure Anki is installed and AnkiConnect plugin is set up.")
-            elif "duplicate" in str(e):
-                await query.message.reply_text("This card already exists in Anki.")
-            else:
-                logging.exception(e)
-                await query.message.reply_text(f"Error adding card to Anki: {str(e)}")
+        await handle_accept_both(update, context)
     elif answer == AcceptContextFixTranslation.key:
         await query.message.reply_text("Please enter your custom translation:")
         return CUSTOM_TRANSLATION
@@ -117,16 +124,15 @@ async def handle_custom_translation(update: Update, context: ContextTypes.DEFAUL
     # Create a new ReversoResult with the custom translation
     modified_results = reverso.ReversoResult(
         en_word=reverso_results.en_word,
-        ru_translations=[custom_translation],  # Replace with user's translation
-        usage_samples=reverso_results.usage_samples  # Keep original context
+        ru_translations=custom_translation.split(),  # replace with user's translation
+        usage_samples=reverso_results.usage_samples
     )
     context.user_data["reverso_result"] = modified_results
     
-    # Show the modified result and prompt for acceptance
     await update.message.reply_text(f"Word: {modified_results.en_word}")
-    await update.message.reply_text(f"Translation: {custom_translation}")
+    await update.message.reply_text(", ".join(modified_results.ru_translations))
     await update.message.reply_html(modified_results.get_usage_samples_html())
-    
+
     keyboard = [
         [InlineKeyboardButton(a.text, callback_data=a.key) for a in Actions.get_all()]
     ]
