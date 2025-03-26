@@ -45,7 +45,7 @@ def launch_anki() -> bool:
     return False
 
 
-def ensure_anki_running()
+def ensure_anki_running():
     if is_anki_connect_responding():
         return 
     
