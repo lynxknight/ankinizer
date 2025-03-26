@@ -67,14 +67,17 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     return WORD
 
 
+async def present_reverso_result(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    results = context.user_data["reverso_result"]
+    await update.message.reply_text(f"Word: {results.en_word}")
+    await update.message.reply_text(", ".join(results.ru_translations))
+    await update.message.reply_html(results.get_usage_samples_html())
+
 async def get_word(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     word = update.message.text
     results = await asyncio.to_thread(reverso.get_reverso_result, word)
-    await update.message.reply_text(f"Word: {results.en_word}")
-    await update.message.reply_text(", ".join(results.ru_translations))
-    logger.info(results.get_usage_samples_html())
-    await update.message.reply_html(results.get_usage_samples_html())
     context.user_data["reverso_result"] = results
+    await present_reverso_result(update, context)
     keyboard = [
         [InlineKeyboardButton(a.text, callback_data=a.key) for a in Actions.get_all()]
     ]
@@ -128,10 +131,8 @@ async def handle_custom_translation(update: Update, context: ContextTypes.DEFAUL
         usage_samples=reverso_results.usage_samples
     )
     context.user_data["reverso_result"] = modified_results
-    
-    await update.message.reply_text(f"Word: {modified_results.en_word}")
-    await update.message.reply_text(", ".join(modified_results.ru_translations))
-    await update.message.reply_html(modified_results.get_usage_samples_html())
+
+    await present_reverso_result(update, context)
 
     keyboard = [
         [InlineKeyboardButton(a.text, callback_data=a.key) for a in Actions.get_all()]
