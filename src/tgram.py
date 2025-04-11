@@ -163,7 +163,7 @@ def read_telegram_token() -> str:
         IOError: If there are problems reading the file
     """
     try:
-        with open(".telegram_key", "r") as f:
+        with open("../.telegram_key", "r") as f:
             return f.read().strip()
     except FileNotFoundError:
         logger.error("Telegram token file .telegram_key not found!")
