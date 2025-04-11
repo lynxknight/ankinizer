@@ -3,4 +3,5 @@
 .telegram_key
 venv/
 .vscode/
+.sensitive/
 __pycache__

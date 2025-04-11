@@ -1,7 +1,7 @@
 import asyncio
 import dataclasses
 import logging
-
+import os
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import (
     ApplicationBuilder,
@@ -15,6 +15,7 @@ from telegram.ext import (
 
 import ankiconnect
 import reverso
+import env
 
 # Enable logging
 logging.basicConfig(
@@ -152,38 +153,13 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     return ConversationHandler.END
 
 
-def read_telegram_token() -> str:
-    """Read telegram bot token from .telegram_key file.
-    
-    Returns:
-        str: The telegram bot token
-        
-    Raises:
-        FileNotFoundError: If .telegram_key file doesn't exist
-        IOError: If there are problems reading the file
-    """
-    try:
-        with open("../.telegram_key", "r") as f:
-            return f.read().strip()
-    except FileNotFoundError:
-        logger.error("Telegram token file .telegram_key not found!")
-        logger.error("Please create .telegram_key file with your Telegram bot token")
-        raise
-    except IOError as e:
-        logger.error(f"Error reading telegram token: {e}")
-        raise
-
-
 def main() -> None:
-    try:
-        token = read_telegram_token()
-    except (FileNotFoundError, IOError):
-        return
+    env.setup_env()
 
     # Build and run the application
     application = (
         ApplicationBuilder()
-        .token(token)
+        .token(os.environ["TELEGRAM_BOT_TOKEN"])
         .build()
     )
 
