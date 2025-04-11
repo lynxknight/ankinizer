@@ -10,7 +10,7 @@ from reverso import ReversoResult, ReversoTranslationSample
 
 TARGET_DECK = "English words"
 ANKI_CONNECT_URL = "http://127.0.0.1:8765"
-MAX_STARTUP_WAIT_SECONDS = 10
+MAX_STARTUP_WAIT_SECONDS = 30
 
 logger = logging.getLogger(__name__)
 
@@ -23,14 +23,17 @@ def is_anki_connect_responding() -> bool:
             "action": "version",
             "version": 6
         }).encode('utf-8')))
-        logger.info("AnkiConnect is responding")
         return True
-    except Exception as e:
-        logger.error(f"Error checking AnkiConnect: {e}")
+    except (urllib.error.URLError, ConnectionRefusedError):
         return False
 
 
 def launch_anki() -> bool:
+    """Launch Anki.app and wait for it to be ready.
+    
+    Returns:
+        bool: True if Anki was successfully launched and is responding, False otherwise
+    """
     try:
         subprocess.Popen(['open', '/Applications/Anki.app'])
         start_time = time.time()
@@ -39,15 +42,22 @@ def launch_anki() -> bool:
                 logger.info("Anki is now running and responding")
                 return True
             time.sleep(1)
+        
         logger.error(f"Anki failed to respond within {MAX_STARTUP_WAIT_SECONDS} seconds")
+        return False
     except Exception as e:
         logger.error(f"Error launching Anki: {e}")
-    return False
+        return False
 
 
-def ensure_anki_running():
+def ensure_anki_running() -> bool:
+    """Ensure Anki is running, launching it if necessary.
+    
+    Returns:
+        bool: True if Anki is running (or was successfully started), False otherwise
+    """
     if is_anki_connect_responding():
-        return 
+        return True
     
     logger.info("Anki is not running, attempting to launch...")
     return launch_anki()
@@ -125,4 +135,4 @@ def _main():
 
 
 if __name__ == "__main__":
-    _main()
+    _main() 

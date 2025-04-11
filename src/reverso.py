@@ -52,4 +52,4 @@ def get_reverso_result(word) -> ReversoResult:
     usage_samples = transform_samples(raw_usage_samples)
     return ReversoResult(
         en_word=word, ru_translations=ru_translations, usage_samples=usage_samples
-    )
+    ) 

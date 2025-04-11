@@ -2,9 +2,6 @@ import asyncio
 import dataclasses
 import logging
 
-import ankiconnect
-import reverso
-
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import (
     ApplicationBuilder,
@@ -15,6 +12,9 @@ from telegram.ext import (
     filters,
     MessageHandler,
 )
+
+import ankiconnect
+import reverso
 
 # Enable logging
 logging.basicConfig(
@@ -37,7 +37,7 @@ class AcceptBoth:
 
 
 class AcceptContextFixTranslation:
-    text = "Fix ru_translation"
+    text = "Accept context, fix translation"
     key = "accept_context_fix_translation"
 
 
@@ -67,17 +67,14 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     return WORD
 
 
-async def present_reverso_result(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    results = context.user_data["reverso_result"]
-    await update.message.reply_text(f"Word: {results.en_word}")
-    await update.message.reply_text(", ".join(results.ru_translations))
-    await update.message.reply_html(results.get_usage_samples_html())
-
 async def get_word(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     word = update.message.text
     results = await asyncio.to_thread(reverso.get_reverso_result, word)
+    await update.message.reply_text(f"Word: {results.en_word}")
+    await update.message.reply_text(", ".join(results.ru_translations))
+    logger.info(results.get_usage_samples_html())
+    await update.message.reply_html(results.get_usage_samples_html())
     context.user_data["reverso_result"] = results
-    await present_reverso_result(update, context)
     keyboard = [
         [InlineKeyboardButton(a.text, callback_data=a.key) for a in Actions.get_all()]
     ]
@@ -86,14 +83,21 @@ async def get_word(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     return ACCEPT_OR_DECLINE
 
 
-async def handle_accept_both(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def handle_accept_both(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle the case when user accepts both translation and context.
+    
+    Args:
+        update: The update object from Telegram
+        context: The context object from Telegram
+    """
     query = update.callback_query
     reverso_results = context.user_data["reverso_result"]
-    await query.message.reply_text("Adding to anki...")
     try:
+        await query.message.reply_text("Checking Anki status...")
         await asyncio.to_thread(
             ankiconnect.add_card_to_anki, reverso_results, sync=True
         )
+        await query.message.reply_text("Added to anki and synced")
     except Exception as e:
         if "Failed to ensure Anki is running" in str(e):
             await query.message.reply_text("Could not connect to Anki. Please make sure Anki is installed and AnkiConnect plugin is set up.")
@@ -102,8 +106,6 @@ async def handle_accept_both(update: Update, context: ContextTypes.DEFAULT_TYPE)
         else:
             logging.exception(e)
             await query.message.reply_text(f"Error adding card to Anki: {str(e)}")
-
-    await query.message.reply_text("Added to anki and synced")
 
 
 async def accept_or_decline(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -127,13 +129,16 @@ async def handle_custom_translation(update: Update, context: ContextTypes.DEFAUL
     # Create a new ReversoResult with the custom translation
     modified_results = reverso.ReversoResult(
         en_word=reverso_results.en_word,
-        ru_translations=custom_translation.split(),  # replace with user's translation
-        usage_samples=reverso_results.usage_samples
+        ru_translations=[custom_translation],  # Replace with user's translation
+        usage_samples=reverso_results.usage_samples  # Keep original context
     )
     context.user_data["reverso_result"] = modified_results
-
-    await present_reverso_result(update, context)
-
+    
+    # Show the modified result and prompt for acceptance
+    await update.message.reply_text(f"Word: {modified_results.en_word}")
+    await update.message.reply_text(f"Translation: {custom_translation}")
+    await update.message.reply_html(modified_results.get_usage_samples_html())
+    
     keyboard = [
         [InlineKeyboardButton(a.text, callback_data=a.key) for a in Actions.get_all()]
     ]
@@ -148,19 +153,37 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 
 
 def read_telegram_token() -> str:
+    """Read telegram bot token from .telegram_key file.
+    
+    Returns:
+        str: The telegram bot token
+        
+    Raises:
+        FileNotFoundError: If .telegram_key file doesn't exist
+        IOError: If there are problems reading the file
+    """
     try:
         with open(".telegram_key", "r") as f:
             return f.read().strip()
     except FileNotFoundError:
-        logger.error(f"Error reading telegram token from .telegram_key: {e}")
+        logger.error("Telegram token file .telegram_key not found!")
+        logger.error("Please create .telegram_key file with your Telegram bot token")
+        raise
+    except IOError as e:
+        logger.error(f"Error reading telegram token: {e}")
         raise
 
 
 def main() -> None:
+    try:
+        token = read_telegram_token()
+    except (FileNotFoundError, IOError):
+        return
+
     # Build and run the application
     application = (
         ApplicationBuilder()
-        .token(read_telegram_token())
+        .token(token)
         .build()
     )
 
@@ -178,4 +201,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    main() 
