@@ -1,9 +1,32 @@
 import dataclasses
 import itertools
+import logging
 import typing
 
-import reverso_context_api
+import env
+import requests
 
+from reverso_agent import get_reverso_result
+
+logger = logging.getLogger(__name__)
+
+
+# global requests_count
+# requests_count = 0
+
+# original_send = requests.Session.send
+
+# def custom_send(self, request: requests.PreparedRequest, **kwargs):
+#     global requests_count
+#     requests_count += 1
+#     logger.info(f"Requests count: {requests_count}")
+#     logger.info(f"URL: {request.url}")
+#     logger.info(f"Method: {request.method}")
+#     logger.info(f"Headers: {request.headers}")
+#     logger.info(f"Body: {request.body}")
+#     return original_send(self, request, **kwargs)
+
+# requests.Session.send = custom_send
 
 @dataclasses.dataclass
 class ReversoTranslationSample:
@@ -35,21 +58,6 @@ class ReversoResult:
     def get_usage_samples_html(self) -> str:
         return "\n\n".join(str(sample) for sample in self.usage_samples)
 
-
-def get_reverso_result(word) -> ReversoResult:
-    client = reverso_context_api.Client("en", "ru")
-
-    def transform_samples(
-        samples: typing.List[typing.Tuple[str, str]]
-    ) -> typing.List[ReversoTranslationSample]:
-        f = lambda x: x.replace("<em>", "<b>").replace("</em>", "</b>")
-        return [ReversoTranslationSample(*map(f, example)) for example in samples]
-
-    ru_translations = list(client.get_translations(word))
-    raw_usage_samples = list(
-        itertools.islice(client.get_translation_samples(word, cleanup=False), 3)
-    )
-    usage_samples = transform_samples(raw_usage_samples)
-    return ReversoResult(
-        en_word=word, ru_translations=ru_translations, usage_samples=usage_samples
-    ) 
+if __name__ == "__main__":
+    env.setup_env()
+    print(get_reverso_result("test"))

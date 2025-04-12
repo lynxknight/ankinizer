@@ -6,6 +6,8 @@ from telegram.ext import CallbackContext
 
 import tgram
 import reverso
+import anki_agent
+import reverso_agent
 
 @pytest.fixture
 def mock_update():
@@ -48,7 +50,7 @@ async def test_accept_both_flow(mock_update, mock_context, sample_reverso_result
     mock_context.user_data["reverso_result"] = sample_reverso_result
     
     # Mock Reverso API
-    with patch("reverso.get_reverso_result", return_value=sample_reverso_result):
+    with patch("reverso_agent.get_reverso_result", return_value=sample_reverso_result):
         # Test getting word
         state = await tgram.get_word(mock_update, mock_context)
         assert state == tgram.ACCEPT_OR_DECLINE
@@ -64,9 +66,9 @@ async def test_accept_both_flow(mock_update, mock_context, sample_reverso_result
         assert state == tgram.ConversationHandler.END
         
         # Verify Anki interaction
-        with patch("ankiconnect.add_card_to_anki") as mock_add_card:
+        with patch("anki_agent.add_card_to_anki") as mock_add_card:
             await tgram.handle_accept_both(mock_update, mock_context)
-            mock_add_card.assert_called_once_with(sample_reverso_result, sync=True)
+            mock_add_card.assert_called_once_with(sample_reverso_result)
 
 
 @pytest.mark.asyncio
@@ -76,7 +78,7 @@ async def test_custom_translation_flow(mock_update, mock_context, sample_reverso
     mock_context.user_data["reverso_result"] = sample_reverso_result
     
     # Test getting word
-    with patch("reverso.get_reverso_result", return_value=sample_reverso_result):
+    with patch("reverso_agent.get_reverso_result", return_value=sample_reverso_result):
         state = await tgram.get_word(mock_update, mock_context)
         assert state == tgram.ACCEPT_OR_DECLINE
         
@@ -102,9 +104,9 @@ async def test_custom_translation_flow(mock_update, mock_context, sample_reverso
         assert state == tgram.ConversationHandler.END
         
         # Verify Anki interaction with modified translation
-        with patch("tgram.ankiconnect.add_card_to_anki") as mock_add_card:
+        with patch("anki_agent.add_card_to_anki") as mock_add_card:
             await tgram.handle_accept_both(mock_update, mock_context)
-            mock_add_card.assert_called_once_with(modified_result, sync=True)
+            mock_add_card.assert_called_once_with(modified_result)
 
 
 @pytest.mark.asyncio
@@ -113,9 +115,9 @@ async def test_reject_flow(mock_update, mock_context, sample_reverso_result):
     mock_update.message.text = "test"
     mock_context.user_data["reverso_result"] = sample_reverso_result
     
-    with patch("reverso.get_reverso_result", return_value=sample_reverso_result):
+    with patch("reverso_agent.get_reverso_result", return_value=sample_reverso_result):
         # Verify no Anki interaction
-        with patch("ankiconnect.add_card_to_anki") as mock_add_card:
+        with patch("anki_agent.add_card_to_anki") as mock_add_card:
             state = await tgram.get_word(mock_update, mock_context)
             assert state == tgram.ACCEPT_OR_DECLINE
             # Test rejecting

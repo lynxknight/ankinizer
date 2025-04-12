@@ -13,8 +13,9 @@ from telegram.ext import (
     MessageHandler,
 )
 
-import ankiconnect
+import anki_agent
 import reverso
+import reverso_agent
 import env
 
 # Enable logging
@@ -70,7 +71,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 
 async def get_word(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     word = update.message.text
-    results = await asyncio.to_thread(reverso.get_reverso_result, word)
+    word = word.strip().lower()
+    await update.message.reply_text(f"{word=} received, getting translation...")
+    results = await reverso_agent.get_reverso_result(word)
     await update.message.reply_text(f"Word: {results.en_word}")
     await update.message.reply_text(", ".join(results.ru_translations))
     logger.info(results.get_usage_samples_html())
@@ -93,20 +96,13 @@ async def handle_accept_both(update: Update, context: ContextTypes.DEFAULT_TYPE)
     """
     query = update.callback_query
     reverso_results = context.user_data["reverso_result"]
+    await update.message.reply_text(f"Adding card to Anki...")
     try:
-        await query.message.reply_text("Checking Anki status...")
-        await asyncio.to_thread(
-            ankiconnect.add_card_to_anki, reverso_results, sync=True
-        )
-        await query.message.reply_text("Added to anki and synced")
+        await anki_agent.add_card_to_anki(reverso_results)
+        await update.message.reply_text(f"Card added to Anki")
     except Exception as e:
-        if "Failed to ensure Anki is running" in str(e):
-            await query.message.reply_text("Could not connect to Anki. Please make sure Anki is installed and AnkiConnect plugin is set up.")
-        elif "duplicate" in str(e):
-            await query.message.reply_text("This card already exists in Anki.")
-        else:
-            logging.exception(e)
-            await query.message.reply_text(f"Error adding card to Anki: {str(e)}")
+        logging.exception(e)
+        await query.message.reply_text(f"Error adding card to Anki: {str(e)}")
 
 
 async def accept_or_decline(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
