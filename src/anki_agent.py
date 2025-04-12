@@ -5,7 +5,7 @@ import dataclasses
 import logging
 
 import playwright.async_api
-import reverso
+import reverso_agent
 import env
 
 logger = logging.getLogger(__name__)
@@ -15,7 +15,7 @@ class PlaywrightParams:
     headless: bool = True
     slow_mo: int = 0
 
-def format_back_html(reverso_result: reverso.ReversoResult) -> str:
+def format_back_html(reverso_result: reverso_agent.ReversoResult) -> str:
     return (''
         + " / ".join(reverso_result.ru_translations)
         + "<div><br><br></div> * "
@@ -23,7 +23,7 @@ def format_back_html(reverso_result: reverso.ReversoResult) -> str:
         + ''
     )
 
-async def add_card_to_anki(reverso_result: reverso.ReversoResult, playwright_params: PlaywrightParams | None = None) -> None:
+async def add_card_to_anki(reverso_result: reverso_agent.ReversoResult, playwright_params: PlaywrightParams | None = None) -> None:
     if playwright_params is None:
         playwright_params = PlaywrightParams()
     async with playwright.async_api.async_playwright() as p:
@@ -89,7 +89,7 @@ async def add_card_to_anki(reverso_result: reverso.ReversoResult, playwright_par
 async def main():
     env.setup_env()
     await add_card_to_anki(
-        reverso.ReversoResult(
+        reverso_agent.ReversoResult(
             en_word="serendipity" + f'{time.time()}',
             ru_translations=["серендипность", "интуитивная прозорливость", "удача", "милость"],
             usage_samples="""Process art in its employment of <b>serendipity</b> has a marked correspondence with Dada. -> Процесс-арт в его отношении к <b>серендипности</b> имеет ярко выраженные пересечения с дадаизмом.

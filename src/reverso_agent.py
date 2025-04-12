@@ -5,7 +5,6 @@ import typing
 from bs4 import BeautifulSoup
 from playwright.async_api import async_playwright, TimeoutError
 
-import reverso
 
 logger = logging.getLogger(__name__)
 
@@ -51,7 +50,55 @@ def parse_examples(html: str) -> typing.List[typing.Dict[str, str]]:
             })
     return examples
 
-async def get_reverso_result(word: str, playwright_params: PlaywrightParams | None = None) -> reverso.ReversoResult:
+
+# global requests_count
+# requests_count = 0
+
+# original_send = requests.Session.send
+
+# def custom_send(self, request: requests.PreparedRequest, **kwargs):
+#     global requests_count
+#     requests_count += 1
+#     logger.info(f"Requests count: {requests_count}")
+#     logger.info(f"URL: {request.url}")
+#     logger.info(f"Method: {request.method}")
+#     logger.info(f"Headers: {request.headers}")
+#     logger.info(f"Body: {request.body}")
+#     return original_send(self, request, **kwargs)
+
+# requests.Session.send = custom_send
+
+@dataclasses.dataclass
+class ReversoTranslationSample:
+    en: str
+    ru: str
+
+    def __repr__(self) -> str:
+        return f"\tReversoTranslationSample<{self.en=}, {self.ru=}>"
+
+    def __str__(self) -> str:
+        return f"{self.en} -> {self.ru}"
+
+
+@dataclasses.dataclass
+class ReversoResult:
+    en_word: str
+    ru_translations: typing.List[str]
+    usage_samples: typing.List[ReversoTranslationSample]
+
+    def __repr__(self) -> str:
+        return "\n".join(
+            [
+                f"ReversoResult<{self.en_word=}>:",
+                f"{self.ru_translations=}",
+                "\n".join(str(sample) for sample in self.usage_samples),
+            ]
+        )
+
+    def get_usage_samples_html(self) -> str:
+        return "\n\n".join(str(sample) for sample in self.usage_samples)
+
+async def get_reverso_result(word: str, playwright_params: PlaywrightParams | None = None) -> ReversoResult:
     """Get translation and examples from Reverso Context using Playwright.
     
     Args:
@@ -139,11 +186,11 @@ async def get_reverso_result(word: str, playwright_params: PlaywrightParams | No
         examples = parse_examples(content)
         
         # Create ReversoResult object with <em> tags replaced by <b> tags
-        return reverso.ReversoResult(
+        return ReversoResult(
             en_word=word,
             ru_translations=translations,
             usage_samples=[
-                reverso.ReversoTranslationSample(
+                ReversoTranslationSample(
                     en=replace_em_tags(e['en']),
                     ru=replace_em_tags(e['ru'])
                 ) for e in examples[:3]

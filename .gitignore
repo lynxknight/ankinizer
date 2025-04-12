@@ -5,3 +5,4 @@ venv/
 .vscode/
 .sensitive/
 __pycache__
+src/play.py

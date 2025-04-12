@@ -5,7 +5,6 @@ from telegram import Update, CallbackQuery, Message, User, Chat
 from telegram.ext import CallbackContext
 
 import tgram
-import reverso
 import anki_agent
 import reverso_agent
 
@@ -31,11 +30,11 @@ def mock_context():
 
 @pytest.fixture
 def sample_reverso_result():
-    return reverso.ReversoResult(
+    return reverso_agent.ReversoResult(
         en_word="test",
         ru_translations=["тест"],
         usage_samples=[
-            reverso.ReversoTranslationSample(
+            reverso_agent.ReversoTranslationSample(
                 en="This is a test",
                 ru="Это тест"
             )

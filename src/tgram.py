@@ -1,4 +1,3 @@
-import asyncio
 import dataclasses
 import logging
 import os
@@ -14,7 +13,6 @@ from telegram.ext import (
 )
 
 import anki_agent
-import reverso
 import reverso_agent
 import env
 
@@ -61,7 +59,7 @@ class Actions:
 @dataclasses.dataclass
 class CallbackData:
     action_key: str
-    reverso_result: reverso.ReversoResult
+    reverso_result: reverso_agent.ReversoResult
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -96,10 +94,8 @@ async def handle_accept_both(update: Update, context: ContextTypes.DEFAULT_TYPE)
     """
     query = update.callback_query
     reverso_results = context.user_data["reverso_result"]
-    await update.message.reply_text(f"Adding card to Anki...")
     try:
         await anki_agent.add_card_to_anki(reverso_results)
-        await update.message.reply_text(f"Card added to Anki")
     except Exception as e:
         logging.exception(e)
         await query.message.reply_text(f"Error adding card to Anki: {str(e)}")
@@ -113,7 +109,9 @@ async def accept_or_decline(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     if answer == Reject.key:
         pass
     elif answer == AcceptBoth.key:
+        await query.message.reply_text("Adding card to Anki...")
         await handle_accept_both(update, context)
+        await query.message.reply_text("Card added to Anki")
     elif answer == AcceptContextFixTranslation.key:
         await query.message.reply_text("Please enter your custom translation:")
         return CUSTOM_TRANSLATION
@@ -124,7 +122,7 @@ async def handle_custom_translation(update: Update, context: ContextTypes.DEFAUL
     custom_translation = update.message.text
     reverso_results = context.user_data["reverso_result"]
     # Create a new ReversoResult with the custom translation
-    modified_results = reverso.ReversoResult(
+    modified_results = reverso_agent.ReversoResult(
         en_word=reverso_results.en_word,
         ru_translations=[custom_translation],  # Replace with user's translation
         usage_samples=reverso_results.usage_samples  # Keep original context
