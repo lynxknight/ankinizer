@@ -73,7 +73,8 @@ async def get_word(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await update.message.reply_text(f"{word=} received, getting translation...")
     results = await reverso_agent.get_reverso_result(word)
     await update.message.reply_text(f"Word: {results.en_word}")
-    await update.message.reply_text(", ".join(results.ru_translations))
+    translation = ", ".join(results.ru_translations)
+    await update.message.reply_markdown_v2(f"Translation: ` {translation} `")
     logger.info(results.get_usage_samples_html())
     await update.message.reply_html(results.get_usage_samples_html())
     context.user_data["reverso_result"] = results
@@ -131,7 +132,7 @@ async def handle_custom_translation(update: Update, context: ContextTypes.DEFAUL
     
     # Show the modified result and prompt for acceptance
     await update.message.reply_text(f"Word: {modified_results.en_word}")
-    await update.message.reply_text(f"Translation: {custom_translation}")
+    await update.message.reply_markdown_v2(f"Translation: ` {custom_translation} `")
     await update.message.reply_html(modified_results.get_usage_samples_html())
     
     keyboard = [
