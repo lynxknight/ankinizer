@@ -32,12 +32,12 @@ ACCEPT_OR_DECLINE = "ACCEPT_OR_DECLINE"
 
 
 class AcceptBoth:
-    text = "Accept both"
+    text = "OK"
     key = "accept_both"
 
 
 class AcceptContextFixTranslation:
-    text = "Accept context, fix translation"
+    text = "Fix TL"
     key = "accept_context_fix_translation"
 
 
@@ -147,6 +147,12 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     return ConversationHandler.END
 
 
+async def handle_text_during_accept_or_decline(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Handle text input during ACCEPT_OR_DECLINE state by treating it as a rejection."""
+    await update.message.reply_text("Text input during selection is treated as rejection.")
+    return ConversationHandler.END
+
+
 def main() -> None:
     env.setup_env()
 
@@ -160,7 +166,10 @@ def main() -> None:
     conv_handler = ConversationHandler(
         entry_points=[MessageHandler(filters.TEXT & ~filters.COMMAND, get_word)],
         states={
-            ACCEPT_OR_DECLINE: [CallbackQueryHandler(accept_or_decline)],
+            ACCEPT_OR_DECLINE: [
+                CallbackQueryHandler(accept_or_decline),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_during_accept_or_decline)
+            ],
             CUSTOM_TRANSLATION: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_custom_translation)],
         },
         fallbacks=[CommandHandler("cancel", cancel)],
