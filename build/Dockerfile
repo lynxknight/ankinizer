@@ -45,9 +45,10 @@ ENV PYTHONUNBUFFERED=1
 ENV PYTHONPATH=/app
 
 # Copy application code (this should be the last step to leverage Docker cache)
-COPY src/ /app/src/
+COPY ankinizer/ /app/ankinizer/
 
 RUN mkdir debug/
 
 # Command to run the application
-CMD ["python", "src/tgram.py"] 
+ENV PYTHONPATH=/app
+CMD ["python", "ankinizer/tgram.py"] 

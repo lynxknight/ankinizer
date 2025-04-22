@@ -5,8 +5,8 @@ import dataclasses
 import logging
 
 import playwright.async_api
-import reverso_agent
-import env
+from ankinizer import reverso_agent
+from ankinizer import env
 
 logger = logging.getLogger(__name__)
 

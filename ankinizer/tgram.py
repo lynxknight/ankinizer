@@ -12,9 +12,9 @@ from telegram.ext import (
     MessageHandler,
 )
 
-import anki_agent
-import reverso_agent
-import env
+from ankinizer import anki_agent
+from ankinizer import reverso_agent
+from ankinizer import env
 
 # Enable logging
 logging.basicConfig(
