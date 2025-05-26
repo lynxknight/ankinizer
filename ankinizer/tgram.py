@@ -1,7 +1,8 @@
 import dataclasses
 import logging
 import os
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from typing import Dict, Any, cast
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update, Message, CallbackQuery
 from telegram.ext import (
     ApplicationBuilder,
     CallbackQueryHandler,
@@ -26,9 +27,7 @@ logger = logging.getLogger(__name__)
 WORD, CUSTOM_TRANSLATION, ACCEPT_OR_DECLINE = range(3)
 
 # Store user data
-user_data = {}
-
-ACCEPT_OR_DECLINE = "ACCEPT_OR_DECLINE"
+user_data: Dict[str, Any] = {}
 
 
 class AcceptBoth:
@@ -63,13 +62,17 @@ class CallbackData:
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    if update.message is None:
+        return ConversationHandler.END
     await update.message.reply_text("Please send me a word.")
     return WORD
 
 
 async def get_word(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    word = update.message.text
-    word = word.strip().lower()
+    if update.message is None or update.message.text is None:
+        return ConversationHandler.END
+    
+    word = update.message.text.strip().lower()
     await update.message.reply_text(f"{word=} received, getting translation...")
     results = await reverso_agent.get_reverso_result(word)
     await update.message.reply_text(f"Word: {results.en_word}")
@@ -77,7 +80,11 @@ async def get_word(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await update.message.reply_markdown_v2(f"Translation: ` {translation} `")
     logger.info(results.get_usage_samples_html())
     await update.message.reply_html(results.get_usage_samples_html())
+    
+    if context.user_data is None:
+        context.user_data = {}
     context.user_data["reverso_result"] = results
+    
     keyboard = [
         [InlineKeyboardButton(a.text, callback_data=a.key) for a in Actions.get_all()]
     ]
@@ -93,8 +100,15 @@ async def handle_accept_both(update: Update, context: ContextTypes.DEFAULT_TYPE)
         update: The update object from Telegram
         context: The context object from Telegram
     """
+    if update.callback_query is None or update.callback_query.message is None or context.user_data is None:
+        return
+    
     query = update.callback_query
-    reverso_results = context.user_data["reverso_result"]
+    reverso_results = context.user_data.get("reverso_result")
+    if not isinstance(reverso_results, reverso_agent.ReversoResult):
+        await query.message.reply_text("Error: Invalid reverso result")
+        return
+        
     try:
         await anki_agent.add_card_to_anki(reverso_results)
     except Exception as e:
@@ -103,9 +117,23 @@ async def handle_accept_both(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 
 async def accept_or_decline(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    if update.callback_query is None or context.user_data is None:
+        return ConversationHandler.END
+    
     query = update.callback_query
+    if query.data is None:
+        return ConversationHandler.END
+        
     answer = query.data
-    reverso_results = context.user_data["reverso_result"]
+    reverso_results = context.user_data.get("reverso_result")
+    if not isinstance(reverso_results, reverso_agent.ReversoResult):
+        if query.message is not None:
+            await query.message.reply_text("Error: Invalid reverso result")
+        return ConversationHandler.END
+        
+    if query.message is None:
+        return ConversationHandler.END
+        
     await query.edit_message_text(text=Actions.get_key_to_text_map()[answer])
     if answer == Reject.key:
         pass
@@ -120,8 +148,15 @@ async def accept_or_decline(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
 
 async def handle_custom_translation(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    if update.message is None or update.message.text is None or context.user_data is None:
+        return ConversationHandler.END
+        
     custom_translation = update.message.text
-    reverso_results = context.user_data["reverso_result"]
+    reverso_results = context.user_data.get("reverso_result")
+    if not isinstance(reverso_results, reverso_agent.ReversoResult):
+        await update.message.reply_text("Error: Invalid reverso result")
+        return ConversationHandler.END
+        
     # Create a new ReversoResult with the custom translation
     modified_results = reverso_agent.ReversoResult(
         en_word=reverso_results.en_word,
@@ -144,12 +179,16 @@ async def handle_custom_translation(update: Update, context: ContextTypes.DEFAUL
 
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    if update.message is None:
+        return ConversationHandler.END
     await update.message.reply_text("Operation cancelled.")
     return ConversationHandler.END
 
 
 async def handle_text_during_accept_or_decline(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Handle text input during ACCEPT_OR_DECLINE state by treating it as a rejection."""
+    if update.message is None:
+        return ConversationHandler.END
     await update.message.reply_text("Text input during selection is treated as rejection.")
     return ConversationHandler.END
 
