@@ -142,6 +142,16 @@ async def accept_or_decline(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         await handle_accept_both(update, context)
         await query.message.reply_text("Card added to Anki")
     elif answer == AcceptContextFixTranslation.key:
+        # Show first 3 translations if available
+        if len(reverso_results.ru_translations) >= 3:
+            first_3 = ", ".join(reverso_results.ru_translations[:3])
+            await query.message.reply_markdown_v2(f"First 3 translations: `{first_3}`")
+        
+        # Show first 5 translations if available
+        if len(reverso_results.ru_translations) >= 5:
+            first_5 = ", ".join(reverso_results.ru_translations[:5])
+            await query.message.reply_markdown_v2(f"First 5 translations: `{first_5}`")
+            
         await query.message.reply_text("Please enter your custom translation:")
         return CUSTOM_TRANSLATION
     return ConversationHandler.END

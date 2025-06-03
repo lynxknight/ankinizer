@@ -126,4 +126,67 @@ async def test_reject_flow(mock_update, mock_context, sample_reverso_result):
             mock_update.callback_query.data = tgram.Reject.key
             state = await tgram.accept_or_decline(mock_update, mock_context)
             assert state == tgram.ConversationHandler.END
-        mock_add_card.assert_not_called() 
+        mock_add_card.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_translation_display_flow(mock_update, mock_context):
+    # Test case 1: More than 5 translations
+    translations_5plus = ["кот", "кошка", "котенок", "котик", "котом", "котом"]
+    result_5plus = reverso_agent.ReversoResult(
+        en_word="cat",
+        ru_translations=translations_5plus,
+        usage_samples=[]
+    )
+    mock_context.user_data["reverso_result"] = result_5plus
+    mock_update.callback_query.data = tgram.AcceptContextFixTranslation.key
+    
+    state = await tgram.accept_or_decline(mock_update, mock_context)
+    assert state == tgram.CUSTOM_TRANSLATION
+    
+    # Verify both messages were sent
+    mock_update.callback_query.message.reply_markdown_v2.assert_any_call(
+        "First 3 translations: `кот, кошка, котенок`"
+    )
+    mock_update.callback_query.message.reply_markdown_v2.assert_any_call(
+        "First 5 translations: `кот, кошка, котенок, котик, котом`"
+    )
+    
+    # Test case 2: Exactly 4 translations
+    translations_4 = ["кот", "кошка", "котенок", "котик"]
+    result_4 = reverso_agent.ReversoResult(
+        en_word="cat",
+        ru_translations=translations_4,
+        usage_samples=[]
+    )
+    mock_context.user_data["reverso_result"] = result_4
+    mock_update.callback_query.message.reset_mock()
+    
+    state = await tgram.accept_or_decline(mock_update, mock_context)
+    assert state == tgram.CUSTOM_TRANSLATION
+    
+    # Verify only first 3 message was sent
+    mock_update.callback_query.message.reply_markdown_v2.assert_called_once_with(
+        "First 3 translations: `кот, кошка, котенок`"
+    )
+    
+    # Test case 3: Less than 3 translations
+    translations_2 = ["кот", "кошка"]
+    result_2 = reverso_agent.ReversoResult(
+        en_word="cat",
+        ru_translations=translations_2,
+        usage_samples=[]
+    )
+    mock_context.user_data["reverso_result"] = result_2
+    mock_update.callback_query.message.reset_mock()
+    
+    state = await tgram.accept_or_decline(mock_update, mock_context)
+    assert state == tgram.CUSTOM_TRANSLATION
+    
+    # Verify no translation messages were sent
+    mock_update.callback_query.message.reply_markdown_v2.assert_not_called()
+    
+    # Verify custom translation prompt was sent in all cases
+    mock_update.callback_query.message.reply_text.assert_called_with(
+        "Please enter your custom translation:"
+    ) 
