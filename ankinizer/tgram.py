@@ -45,14 +45,32 @@ class Reject:
     key = "reject"
 
 
+class AcceptFirst3:
+    text = "First 3"
+    key = "accept_first_3"
+
+
+class AcceptFirst5:
+    text = "First 5"
+    key = "accept_first_5"
+
+
 class Actions:
     @staticmethod
     def get_all():
         return [AcceptBoth, AcceptContextFixTranslation, Reject]
 
     @staticmethod
+    def get_custom_translation_actions():
+        return [AcceptFirst3, AcceptFirst5, Reject]
+
+    @staticmethod
     def get_key_to_text_map():
         return {a.key: a.text for a in Actions.get_all()}
+
+    @staticmethod
+    def get_custom_translation_key_to_text_map():
+        return {a.key: a.text for a in Actions.get_custom_translation_actions()}
 
 
 @dataclasses.dataclass
@@ -93,13 +111,8 @@ async def get_word(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     return ACCEPT_OR_DECLINE
 
 
-async def handle_accept_both(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handle the case when user accepts both translation and context.
-    
-    Args:
-        update: The update object from Telegram
-        context: The context object from Telegram
-    """
+async def handle_add_to_anki(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle the case when user accepts both translation and context."""
     if update.callback_query is None or update.callback_query.message is None or context.user_data is None:
         return
     
@@ -109,8 +122,10 @@ async def handle_accept_both(update: Update, context: ContextTypes.DEFAULT_TYPE)
         await query.message.reply_text("Error: Invalid reverso result")
         return
         
+    await query.message.reply_text("Adding card to Anki...")
     try:
         await anki_agent.add_card_to_anki(reverso_results)
+        await query.message.reply_text("Card added to Anki")
     except Exception as e:
         logging.exception(e)
         await query.message.reply_text(f"Error adding card to Anki: {str(e)}")
@@ -138,9 +153,7 @@ async def accept_or_decline(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     if answer == Reject.key:
         pass
     elif answer == AcceptBoth.key:
-        await query.message.reply_text("Adding card to Anki...")
-        await handle_accept_both(update, context)
-        await query.message.reply_text("Card added to Anki")
+        await handle_add_to_anki(update, context)
     elif answer == AcceptContextFixTranslation.key:
         # Show first 3 translations if available
         if len(reverso_results.ru_translations) >= 3:
@@ -152,40 +165,84 @@ async def accept_or_decline(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             first_5 = ", ".join(reverso_results.ru_translations[:5])
             await query.message.reply_markdown_v2(f"First 5 translations: `{first_5}`")
             
-        await query.message.reply_text("Please enter your custom translation:")
+        keyboard = [
+            [InlineKeyboardButton(a.text, callback_data=a.key) for a in Actions.get_custom_translation_actions()]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await query.message.reply_text("Choose translation or enter custom:", reply_markup=reply_markup)
         return CUSTOM_TRANSLATION
     return ConversationHandler.END
 
 
-async def handle_custom_translation(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    if update.message is None or update.message.text is None or context.user_data is None:
+async def handle_first_n_translations(update: Update, context: ContextTypes.DEFAULT_TYPE, n: int) -> int:
+    """Handle accepting first N translations."""
+    if update.callback_query is None or update.callback_query.message is None or context.user_data is None:
         return ConversationHandler.END
         
-    custom_translation = update.message.text
     reverso_results = context.user_data.get("reverso_result")
     if not isinstance(reverso_results, reverso_agent.ReversoResult):
-        await update.message.reply_text("Error: Invalid reverso result")
+        await update.callback_query.message.reply_text("Error: Invalid reverso result")
         return ConversationHandler.END
         
-    # Create a new ReversoResult with the custom translation
+    # Create a new ReversoResult with first N translations
     modified_results = reverso_agent.ReversoResult(
         en_word=reverso_results.en_word,
-        ru_translations=[custom_translation],  # Replace with user's translation
-        usage_samples=reverso_results.usage_samples  # Keep original context
+        ru_translations=reverso_results.ru_translations[:n],
+        usage_samples=reverso_results.usage_samples
     )
     context.user_data["reverso_result"] = modified_results
     
-    # Show the modified result and prompt for acceptance
-    await update.message.reply_text(f"Word: {modified_results.en_word}")
-    await update.message.reply_markdown_v2(f"Translation: ` {custom_translation} `")
-    await update.message.reply_html(modified_results.get_usage_samples_html())
+    # Show the modified result and add to Anki
+    await update.callback_query.message.reply_text(f"Word: {modified_results.en_word}")
+    await update.callback_query.message.reply_markdown_v2(
+        f"Translation: `{', '.join(modified_results.ru_translations)}`"
+    )
+    await update.callback_query.message.reply_html(modified_results.get_usage_samples_html())
+    await handle_add_to_anki(update, context)
+    return ConversationHandler.END
+
+
+async def handle_custom_translation(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    if update.callback_query is not None and update.callback_query.data is not None:
+        # Handle button clicks
+        if update.callback_query.data == AcceptFirst3.key:
+            return await handle_first_n_translations(update, context, 3)
+        elif update.callback_query.data == AcceptFirst5.key:
+            return await handle_first_n_translations(update, context, 5)
+        elif update.callback_query.data == Reject.key:
+            if update.callback_query.message is not None:
+                await update.callback_query.message.reply_text("Operation cancelled.")
+            return ConversationHandler.END
+            
+    elif update.message is not None and update.message.text is not None:
+        # Handle manual text input
+        custom_translation = update.message.text
+        reverso_results = context.user_data.get("reverso_result")
+        if not isinstance(reverso_results, reverso_agent.ReversoResult):
+            await update.message.reply_text("Error: Invalid reverso result")
+            return ConversationHandler.END
+            
+        # Create a new ReversoResult with the custom translation
+        modified_results = reverso_agent.ReversoResult(
+            en_word=reverso_results.en_word,
+            ru_translations=[custom_translation],  # Replace with user's translation
+            usage_samples=reverso_results.usage_samples  # Keep original context
+        )
+        context.user_data["reverso_result"] = modified_results
+        
+        # Show the modified result and prompt for acceptance
+        await update.message.reply_text(f"Word: {modified_results.en_word}")
+        await update.message.reply_markdown_v2(f"Translation: `{custom_translation}`")
+        await update.message.reply_html(modified_results.get_usage_samples_html())
+        
+        keyboard = [
+            [InlineKeyboardButton(a.text, callback_data=a.key) for a in Actions.get_all()]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await update.message.reply_text("Add to anki?", reply_markup=reply_markup)
+        return ACCEPT_OR_DECLINE
     
-    keyboard = [
-        [InlineKeyboardButton(a.text, callback_data=a.key) for a in Actions.get_all()]
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_text("Add to anki?", reply_markup=reply_markup)
-    return ACCEPT_OR_DECLINE
+    return ConversationHandler.END
 
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -220,7 +277,10 @@ def main() -> None:
                 CallbackQueryHandler(accept_or_decline),
                 MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_during_accept_or_decline)
             ],
-            CUSTOM_TRANSLATION: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_custom_translation)],
+            CUSTOM_TRANSLATION: [
+                CallbackQueryHandler(handle_custom_translation),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_custom_translation)
+            ],
         },
         fallbacks=[CommandHandler("cancel", cancel)],
     )
@@ -230,4 +290,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main() 
+    main()
