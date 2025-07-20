@@ -36,7 +36,7 @@ class AcceptBoth:
 
 
 class AcceptContextFixTranslation:
-    text = "Fix TL"
+    text = "Custom TL"
     key = "accept_context_fix_translation"
 
 
@@ -45,32 +45,30 @@ class Reject:
     key = "reject"
 
 
-class AcceptFirst3:
-    text = "First 3"
+class First3:
+    text = "F3"
     key = "accept_first_3"
+    n = 3
 
 
-class AcceptFirst5:
-    text = "First 5"
+class First5:
+    text = "F5"
     key = "accept_first_5"
+    n = 5
 
 
 class Actions:
     @staticmethod
     def get_all():
-        return [AcceptBoth, AcceptContextFixTranslation, Reject]
+        return [AcceptBoth, First3, First5, AcceptContextFixTranslation, Reject]
 
     @staticmethod
-    def get_custom_translation_actions():
-        return [AcceptFirst3, AcceptFirst5, Reject]
+    def get_base_actions():
+        return [AcceptBoth, AcceptContextFixTranslation, Reject]
 
     @staticmethod
     def get_key_to_text_map():
         return {a.key: a.text for a in Actions.get_all()}
-
-    @staticmethod
-    def get_custom_translation_key_to_text_map():
-        return {a.key: a.text for a in Actions.get_custom_translation_actions()}
 
 
 @dataclasses.dataclass
@@ -85,6 +83,13 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await update.message.reply_text("Please send me a word.")
     return WORD
 
+def format_ru_translations(ru_translations):
+    for v in (3, 5):
+        if len(ru_translations) >= v:
+            ru_translations[v - 1] += f" ({v})" 
+    return ru_translations
+
+
 
 async def get_word(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     if update.message is None or update.message.text is None:
@@ -94,7 +99,9 @@ async def get_word(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await update.message.reply_text(f"{word=} received, getting translation...")
     results = await reverso_agent.get_reverso_result(word)
     await update.message.reply_text(f"Word: {results.en_word}")
-    translation = ", ".join(results.ru_translations)
+
+
+    translation = ", ".join(format_ru_translations(results.ru_translations))
     await update.message.reply_markdown_v2(f"Translation: ` {translation} `")
     logger.info(results.get_usage_samples_html())
     await update.message.reply_html(results.get_usage_samples_html())
@@ -155,66 +162,33 @@ async def accept_or_decline(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     elif answer == AcceptBoth.key:
         await handle_add_to_anki(update, context)
     elif answer == AcceptContextFixTranslation.key:
-        # Show first 3 translations if available
-        if len(reverso_results.ru_translations) >= 3:
-            first_3 = ", ".join(reverso_results.ru_translations[:3])
-            await query.message.reply_markdown_v2(f"First 3 translations: `{first_3}`")
-        
-        # Show first 5 translations if available
-        if len(reverso_results.ru_translations) >= 5:
-            first_5 = ", ".join(reverso_results.ru_translations[:5])
-            await query.message.reply_markdown_v2(f"First 5 translations: `{first_5}`")
-            
-        keyboard = [
-            [InlineKeyboardButton(a.text, callback_data=a.key) for a in Actions.get_custom_translation_actions()]
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        await query.message.reply_text("Choose translation or enter custom:", reply_markup=reply_markup)
+        await query.message.reply_text("Enter custom translation:")
         return CUSTOM_TRANSLATION
+    elif answer == First3.key:
+        return await handle_first_n_translations(update, context, First3.n)
+    elif answer == First5.key:
+        return await handle_first_n_translations(update, context, First5.n)
     return ConversationHandler.END
 
 
 async def handle_first_n_translations(update: Update, context: ContextTypes.DEFAULT_TYPE, n: int) -> int:
     """Handle accepting first N translations."""
-    if update.callback_query is None or update.callback_query.message is None or context.user_data is None:
+    if (
+        update.callback_query is None
+        or update.callback_query.message is None
+        or context.user_data is None
+        or not isinstance(context.user_data.get("reverso_result"), reverso_agent.ReversoResult)
+    ):
         return ConversationHandler.END
-        
-    reverso_results = context.user_data.get("reverso_result")
-    if not isinstance(reverso_results, reverso_agent.ReversoResult):
-        await update.callback_query.message.reply_text("Error: Invalid reverso result")
-        return ConversationHandler.END
-        
-    # Create a new ReversoResult with first N translations
-    modified_results = reverso_agent.ReversoResult(
-        en_word=reverso_results.en_word,
-        ru_translations=reverso_results.ru_translations[:n],
-        usage_samples=reverso_results.usage_samples
-    )
-    context.user_data["reverso_result"] = modified_results
-    
-    # Show the modified result and add to Anki
-    await update.callback_query.message.reply_text(f"Word: {modified_results.en_word}")
-    await update.callback_query.message.reply_markdown_v2(
-        f"Translation: `{', '.join(modified_results.ru_translations)}`"
-    )
-    await update.callback_query.message.reply_html(modified_results.get_usage_samples_html())
+
+    reverso_results = cast(reverso_agent.ReversoResult, context.user_data.get("reverso_result"))
+    reverso_results.ru_translations = reverso_results.ru_translations[:n]
     await handle_add_to_anki(update, context)
     return ConversationHandler.END
 
 
 async def handle_custom_translation(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    if update.callback_query is not None and update.callback_query.data is not None:
-        # Handle button clicks
-        if update.callback_query.data == AcceptFirst3.key:
-            return await handle_first_n_translations(update, context, 3)
-        elif update.callback_query.data == AcceptFirst5.key:
-            return await handle_first_n_translations(update, context, 5)
-        elif update.callback_query.data == Reject.key:
-            if update.callback_query.message is not None:
-                await update.callback_query.message.reply_text("Operation cancelled.")
-            return ConversationHandler.END
-            
-    elif update.message is not None and update.message.text is not None:
+    if update.message is not None and update.message.text is not None:
         # Handle manual text input
         custom_translation = update.message.text
         reverso_results = context.user_data.get("reverso_result")
@@ -236,13 +210,16 @@ async def handle_custom_translation(update: Update, context: ContextTypes.DEFAUL
         await update.message.reply_html(modified_results.get_usage_samples_html())
         
         keyboard = [
-            [InlineKeyboardButton(a.text, callback_data=a.key) for a in Actions.get_all()]
+            [InlineKeyboardButton(a.text, callback_data=a.key) for a in Actions.get_base_actions()]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         await update.message.reply_text("Add to anki?", reply_markup=reply_markup)
         return ACCEPT_OR_DECLINE
     
+    if update.callback_query and update.callback_query.message:
+        await update.callback_query.message.reply_text("Operation cancelled due to unexpected button press.")
     return ConversationHandler.END
+
 
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -278,7 +255,6 @@ def main() -> None:
                 MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_during_accept_or_decline)
             ],
             CUSTOM_TRANSLATION: [
-                CallbackQueryHandler(handle_custom_translation),
                 MessageHandler(filters.TEXT & ~filters.COMMAND, handle_custom_translation)
             ],
         },
