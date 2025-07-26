@@ -36,7 +36,7 @@ class AcceptBoth:
 
 
 class AcceptContextFixTranslation:
-    text = "Custom TL"
+    text = "Custom"
     key = "accept_context_fix_translation"
 
 
@@ -101,14 +101,15 @@ async def get_word(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await update.message.reply_text(f"Word: {results.en_word}")
 
 
-    translation = ", ".join(format_ru_translations(results.ru_translations))
-    await update.message.reply_markdown_v2(f"Translation: ` {translation} `")
-    logger.info(results.get_usage_samples_html())
-    await update.message.reply_html(results.get_usage_samples_html())
-    
     if context.user_data is None:
         context.user_data = {}
     context.user_data["reverso_result"] = results
+
+    display_ru_translations = list(results.ru_translations)
+    translation = ", ".join(format_ru_translations(display_ru_translations))
+    await update.message.reply_markdown_v2(f"Translation: ` {translation} `")
+    logger.info(results.get_usage_samples_html())
+    await update.message.reply_html(results.get_usage_samples_html())
     
     keyboard = [
         [InlineKeyboardButton(a.text, callback_data=a.key) for a in Actions.get_all()]

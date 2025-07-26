@@ -68,7 +68,9 @@ async def test_accept_both_flow(mock_update, mock_context, sample_reverso_result
         with patch("ankinizer.anki_agent.add_card_to_anki") as mock_add_card:
             state = await tgram.accept_or_decline(mock_update, mock_context)
             assert state == tgram.ConversationHandler.END
-            mock_add_card.assert_called_once_with(sample_reverso_result)
+            mock_add_card.assert_called_once()
+            called_reverso_result = mock_add_card.call_args[0][0]
+            assert called_reverso_result.ru_translations == ["тест1", "тест2", "тест3", "тест4", "тест5", "тест6"]
             mock_update.callback_query.message.reply_text.assert_has_calls([
                 call("Adding card to Anki..."),
                 call("Card added to Anki")
